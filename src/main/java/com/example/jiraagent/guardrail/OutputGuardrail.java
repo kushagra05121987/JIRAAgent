@@ -146,13 +146,6 @@ public class OutputGuardrail {
         }
     }
 
-    /**
-     * Builds the context list for the RAGAS NLI template.
-     * Passing only the user prompt caused legitimate internal steps (COUNT_IDS,
-     * pagination) to score 0 because they are not literally mentioned in the prompt.
-     * Adding the tool catalog and planner rules as context documents lets RAGAS
-     * infer that those steps are valid orchestration, not hallucinations.
-     */
     private List<String> buildGroundednessContexts(String userPrompt) {
         String toolContext = "The planner has access to the following tools: "
                 + registry.names() + ". "
@@ -167,18 +160,11 @@ public class OutputGuardrail {
 
     private String serializePlan(Plan plan) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Plan: ").append(plan.summary()).append("\n");
-        sb.append("Steps:\n");
+        sb.append(plan.summary()).append("\n");
+        sb.append("Actions to be performed:\n");
         for (PlanStep step : plan.steps()) {
-            String args = step.args() == null ? "" :
-                    step.args().entrySet().stream()
-                            .map(e -> e.getKey() + "=" + e.getValue())
-                            .collect(Collectors.joining(", "));
-            sb.append(step.stepNumber()).append(". ")
-                    .append(step.tool())
-                    .append("(").append(args).append(")")
-                    .append(" — ").append(step.rationale())
-                    .append("\n");
+            if (step.isCount()) continue;
+            sb.append("- ").append(step.rationale()).append("\n");
         }
         return sb.toString();
     }

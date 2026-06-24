@@ -6,10 +6,8 @@ import com.example.jiraagent.exec.ToolInvoker;
 import com.example.jiraagent.model.Plan;
 import com.example.jiraagent.model.PlanStep;
 import com.example.jiraagent.service.SsePublisher;
-import org.bsc.langgraph4j.CompiledGraph;
-import org.bsc.langgraph4j.GraphStateException;
-import org.bsc.langgraph4j.RunnableConfig;
-import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.*;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
@@ -31,11 +29,13 @@ public class GraphPlanExecutor {
     private final ToolInvoker invoker;
     private final int pageSize;
     private final SsePublisher ssePublisher;
+    private final int maxIterations;
 
-    public GraphPlanExecutor(ToolInvoker invoker, @Value("${agent.executor.page-size:50}") int pageSize, SsePublisher ssePublisher) {
+    public GraphPlanExecutor(ToolInvoker invoker, @Value("${agent.executor.page-size:50}") int pageSize, SsePublisher ssePublisher, @Value("${agent.executor.maxIterations:2000}") int maxIterations) {
         this.invoker = invoker;
         this.pageSize = pageSize;
         this.ssePublisher = ssePublisher;
+        this.maxIterations = maxIterations;
     }
 
     public ExecutionReport execute(Plan plan, FluxSink<ServerSentEvent<Object>> sink) {
@@ -96,6 +96,6 @@ public class GraphPlanExecutor {
                         , Map.of("more", "process_items", "exhausted", END))
                 .addEdge("process_items", "fetch_page");
 
-        return g.compile();
+        return g.compile(CompileConfig.builder().checkpointSaver(new MemorySaver()).recursionLimit(maxIterations).build());
     }
 }
