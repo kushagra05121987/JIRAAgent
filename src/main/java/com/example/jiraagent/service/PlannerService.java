@@ -16,11 +16,11 @@ public class PlannerService {
             You are a planning component for a tool-using agent.
             Convert the user's request into an ordered plan of tool-execution requests.
             You never execute anything yourself.
-
+            
             Use ONLY these tools (name -> description and JSON input schema):
-
+            
             %s
-
+            
             Output rules:
             - Produce a step ONLY for parts of the request that map to an available tool.
             - Number steps from 1, in execution order.
@@ -58,7 +58,7 @@ public class PlannerService {
     }
 
     public Plan plan(String userPrompt, String priorFailure) {
-        String system = BASE_INSTRUCTIONS.formatted(renderCatalogue());
+        String system = BASE_INSTRUCTIONS.formatted(createToolSpecifications());
         String user = userPrompt;
         if (priorFailure != null && !priorFailure.isBlank()) {
             user = userPrompt + "\n\nYour previous plan was REJECTED for this reason:\n"
@@ -71,7 +71,7 @@ public class PlannerService {
                 .entity(Plan.class);
     }
 
-    private String renderCatalogue() {
+    private String createToolSpecifications() {
         StringBuilder sb = new StringBuilder();
         int i = 1;
         for (ToolDefinition def : registry.definitions()) {
