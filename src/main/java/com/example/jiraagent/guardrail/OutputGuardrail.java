@@ -35,7 +35,7 @@ public class OutputGuardrail {
     private double groundednessThresholdScore;
 
     @Value("${agent.guardrail.groundedness.check.threshold:2}")
-    private final int groundednessCheckThreshold = 1;
+    private final int groundednessCheckThreshold = 3;
 
     private static int currentCalls;
 
