@@ -21,7 +21,7 @@ public class ValidateNode implements NodeAction<PlanGraphState> {
 
     @Override
     public Map<String, Object> apply(PlanGraphState state) {
-        GuardrailResult result = guardrail.check(state.plan());
+        GuardrailResult result = guardrail.check(state.plan(), state.prompt());
 
         log.debug("validate node: allowed={} reason={}", result.allowed(), result.reason());
 

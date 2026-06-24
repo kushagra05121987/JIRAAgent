@@ -6,6 +6,9 @@ import com.example.jiraagent.graph.GraphPlanExecutor;
 import com.example.jiraagent.graph.PlanGraph;
 import com.example.jiraagent.guardrail.GuardrailResult;
 import com.example.jiraagent.guardrail.InputGuardrail;
+import com.example.jiraagent.guardrail.OutputGuardrail;
+import java.util.ArrayList;
+import java.util.List;
 import com.example.jiraagent.model.Plan;
 import com.example.jiraagent.model.PlanRequest;
 import com.example.jiraagent.model.PlanResponse;
@@ -23,14 +26,16 @@ public class PlanningOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(PlanningOrchestrator.class);
 
     private final InputGuardrail inputGuardrail;
+    private final OutputGuardrail outputGuardrail;
     private final PlanExecutor executor;
     private final GraphPlanExecutor graphExecutor;
     private final boolean useGraph;
     private final PlanGraph planGraph;
     private final SsePublisher ssePublisher;
 
-    public PlanningOrchestrator(InputGuardrail inputGuardrail, SsePublisher ssePublisher, PlanExecutor executor, GraphPlanExecutor graphExecutor, PlanGraph planGraph, @Value("${agent.executor.use-graph:true}") boolean useGraph) {
+    public PlanningOrchestrator(InputGuardrail inputGuardrail, OutputGuardrail outputGuardrail, SsePublisher ssePublisher, PlanExecutor executor, GraphPlanExecutor graphExecutor, PlanGraph planGraph, @Value("${agent.executor.use-graph:true}") boolean useGraph) {
         this.inputGuardrail = inputGuardrail;
+        this.outputGuardrail = outputGuardrail;
         this.executor = executor;
         this.graphExecutor = graphExecutor;
         this.useGraph = useGraph;
