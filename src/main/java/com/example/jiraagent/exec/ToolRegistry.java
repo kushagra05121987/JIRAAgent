@@ -27,6 +27,10 @@ public class ToolRegistry {
         }
     }
 
+    public ToolCallback[] callbacks() {
+        return byName.values().toArray(ToolCallback[]::new);
+    }
+
     public Optional<ToolCallback> find(String name) {
         return name == null ? Optional.empty() : Optional.ofNullable(byName.get(name));
     }
