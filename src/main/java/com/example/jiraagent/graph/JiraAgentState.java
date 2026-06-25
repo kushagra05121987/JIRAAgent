@@ -19,6 +19,8 @@ public class JiraAgentState extends AgentState {
     public static final String CURRENT_ITEMS = "current_items";
     public static final String TOTAL_COUNT = "total_count";
     public static final String RESULTS = "results";
+    public static final String PROCESS_ITEMS_RETRY = "process_items_retry";
+    public static final String PROCESS_ITEM_ATTEMPTS = "process_item_attempts";
 
     public static final Map<String, Channel<?>> SCHEMA = Map.of(
             RESULTS, Channels.appender(ArrayList::new)
@@ -54,5 +56,13 @@ public class JiraAgentState extends AgentState {
 
     public List<StepResult> results() {
         return this.<List<StepResult>>value(RESULTS).orElse(List.of());
+    }
+
+    public boolean processItemsRetry() {
+        return this.<Boolean>value((PROCESS_ITEMS_RETRY)).orElse(false);
+    }
+
+    public int processItemAttempts() {
+        return this.<Integer>value(PROCESS_ITEM_ATTEMPTS).orElse(0);
     }
 }

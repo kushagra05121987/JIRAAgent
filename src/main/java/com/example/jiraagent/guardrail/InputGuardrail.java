@@ -1,19 +1,22 @@
 package com.example.jiraagent.guardrail;
 
 import com.example.jiraagent.model.PlanRequest;
+import com.example.jiraagent.service.SsePublisher;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.FluxSink;
 
 import java.util.List;
 import java.util.regex.Pattern;
 
-/**
- * Input guardrail: checks and cleans the prompt reaches the LLM.
- * reject empty / oversized prompts (defence in depth alongside bean validation)
- * block obvious prompt-injection / jailbreak phrasing
- * ensure the prompt is on-topic (Jira operations) so we don't burn tokens
- */
+
 @Component
 public class InputGuardrail {
+
+    private final SsePublisher ssePublisher;
+    InputGuardrail(SsePublisher ssePublisher) {
+        this.ssePublisher = ssePublisher;
+    }
 
     private static final int MAX_LEN = 2000;
 
@@ -36,18 +39,21 @@ public class InputGuardrail {
             Pattern.compile("(?i)in progress|to ?do|done|in review")
     );
 
-    public GuardrailResult check(PlanRequest request) {
+    public GuardrailResult check(PlanRequest request, FluxSink<ServerSentEvent<Object>> sink) {
         String prompt = request == null ? null : request.prompt();
 
         if (prompt == null || prompt.isBlank()) {
+            ssePublisher.publishEvent(sink, "Prompt is empty");
             return GuardrailResult.block("Prompt is empty.");
         }
         if (prompt.length() > MAX_LEN) {
+            ssePublisher.publishEvent(sink, "Prompt exceeds the maximum length of " + MAX_LEN +" characters.");
             return GuardrailResult.block("Prompt exceeds the maximum length of " + MAX_LEN + " characters.");
         }
 
         for (Pattern p : INJECTION_PATTERNS) {
             if (p.matcher(prompt).find()) {
+                ssePublisher.publishEvent(sink, "Prompt appears to contain an instruction-override / injection attempt and was blocked");
                 return GuardrailResult.block(
                         "Prompt appears to contain an instruction-override / injection attempt and was blocked.");
             }
@@ -55,6 +61,8 @@ public class InputGuardrail {
 
         boolean onTopic = ON_TOPIC_PATTERNS.stream().anyMatch(p -> p.matcher(prompt).find());
         if (!onTopic) {
+            ssePublisher.publishEvent(sink, "Prompt does not appear to describe a Jira operation. " +
+                    "Please describe a Jira-related task (fetching issues, changing status, assigning users).");
             return GuardrailResult.block(
                     "Prompt does not appear to describe a Jira operation. " +
                     "Please describe a Jira-related task (fetching issues, changing status, assigning users).");

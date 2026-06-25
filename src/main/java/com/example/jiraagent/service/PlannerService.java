@@ -2,9 +2,12 @@ package com.example.jiraagent.service;
 
 import com.example.jiraagent.exec.ToolRegistry;
 import com.example.jiraagent.model.Plan;
+import com.example.jiraagent.model.PlanStep;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class PlannerService {
@@ -38,10 +41,10 @@ public class PlannerService {
             - Provide a short rationale per step and a one-line plan summary.
             - If the request cannot be satisfied with these tools, set feasible=false,
               leave steps empty, and explain why in summary. Otherwise feasible=true.
+            - Use the exact tool name as defined. Do not add any prefix to tool names.
+            - Do not use "multi_tool_use.parallel" or any other internal OpenAI tool. List each step individually and sequentially.
             """;
 
-    // toolChoice=none: model sees function definitions for awareness but cannot call them.
-    // Execution is handled by the deterministic PlanExecutor, not the LLM.
     private static final OpenAiChatOptions PLANNER_OPTIONS = OpenAiChatOptions.builder()
             .toolChoice("none")
             .build();
@@ -65,12 +68,28 @@ public class PlannerService {
             user = userPrompt + "\n\nYour previous plan was REJECTED for this reason:\n"
                     + priorFailure + "\nProduce a corrected plan that fixes this.";
         }
-        return chatClient.prompt()
+        Plan raw = chatClient.prompt()
                 .system(BASE_INSTRUCTIONS)
                 .user(user)
                 .options(PLANNER_OPTIONS)
                 .toolCallbacks(registry.callbacks())
                 .call()
                 .entity(Plan.class);
+        return stripFunctionsPrefix(raw);
+    }
+
+    private Plan stripFunctionsPrefix(Plan plan) {
+        if (plan == null || plan.steps() == null) return plan;
+        List<PlanStep> normalized = plan.steps().stream()
+                .filter(s -> s.tool() != null && !s.tool().startsWith("multi_tool_use"))
+                .map(s -> new PlanStep(
+                        s.stepNumber(),
+                        s.tool().replaceFirst("^functions\\.", ""),
+                        s.args(),
+                        s.paginated(),
+                        s.isCount(),
+                        s.rationale()))
+                .toList();
+        return new Plan(plan.summary(), plan.feasible(), normalized);
     }
 }

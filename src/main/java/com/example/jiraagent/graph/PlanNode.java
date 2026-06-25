@@ -22,7 +22,7 @@ public class PlanNode implements NodeAction<PlanGraphState> {
     @Override
     public Map<String, Object> apply(PlanGraphState state) {
         int attempt = state.attempts();
-        String priorReason = state.reason(); // null on first attempt
+        String priorReason = state.reason();
 
         log.debug("plan node: attempt {} (priorFailure={})", attempt + 1, priorReason);
 

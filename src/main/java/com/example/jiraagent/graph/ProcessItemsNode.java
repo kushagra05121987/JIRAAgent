@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ProcessItemsNode implements NodeAction<JiraAgentState> {
@@ -42,37 +43,40 @@ public class ProcessItemsNode implements NodeAction<JiraAgentState> {
         ConcurrentLinkedQueue<StepResult> pageResults = new ConcurrentLinkedQueue<>();
 
         List<CompletableFuture<Void>> futures = new ArrayList<>(items.size());
+        Map<String, Object> update = new HashMap<>();
         for (Object item : items) {
             futures.add(CompletableFuture.runAsync(() -> {
-                ssePublisher.publishEvent(sink, "Processing " + ((Map<String,Object>) item).get("issue_key"));
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+                ssePublisher.publishEvent(sink, "Processing " + ((Map<String, Object>) item).get("issue_key"));
                 runBodyForItem(body, item, pageResults);
             }));
         }
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
 
-        log.debug("process_items offset={} processed {} items, {} calls",
-                offset, items.size(), pageResults.size());
+        if (pageResults.stream().anyMatch(r -> !r.success())) {
+            update.put(JiraAgentState.PROCESS_ITEMS_RETRY, true);
+            update.put(JiraAgentState.PROCESS_ITEM_ATTEMPTS, state.processItemAttempts() + 1);
+        } else {
+            log.info("Item Processed Successfully");
+            update.put(JiraAgentState.PROCESS_ITEM_ATTEMPTS, 0);
+            update.put(JiraAgentState.PROCESS_ITEMS_RETRY, false);
+        }
 
-        Map<String, Object> update = new HashMap<>();
+        log.debug("process_items offset={} processed {} items, {} calls", offset, items.size(), pageResults.size());
+
         update.put(JiraAgentState.OFFSET, offset + pageSize);
         update.put(JiraAgentState.RESULTS, new ArrayList<>(pageResults));
         return update;
     }
 
-    private void runBodyForItem(List<PlanStep> body, Object item,
-                                ConcurrentLinkedQueue<StepResult> sink) {
+    private void runBodyForItem(List<PlanStep> body, Object item, ConcurrentLinkedQueue<StepResult> resultContainer) {
         for (PlanStep step : body) {
             StepResult r = invoker.invoke(step, item, item);
-            sink.add(r);
+            resultContainer.add(r);
             if (!r.success()) {
-                log.warn("Step {} ({}) failed for item {}: {}",
-                        step.stepNumber(), step.tool(), item, r.error());
+                log.warn("Step {} ({}) failed for item {}: {}", step.stepNumber(), step.tool(), item, r.error());
                 return;
+            } else if (r.error() != null) {
+                ssePublisher.publishEvent(sink, r.error());
             }
         }
     }
