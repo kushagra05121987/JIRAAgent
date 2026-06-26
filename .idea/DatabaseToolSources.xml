@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DatabaseToolSources">
+    <data-source name="sqlite" uuid="a50e6047-1498-458c-8d73-6aae83971f4d" type="SQLITE">
+      <base-info connect-type="DB_DEFAULT" product="SQLite" version="3.51.1" major-version="3" minor-version="51" jdbc-name="SQLite JDBC" jdbc-version="3.51.1.0" jdbc-major-version="3" jdbc-minor-version="51" />
+      <user-name />
+      <schema-mapping>
+        <introspection-scope>
+          <node kind="schema">
+            <name qname="main" operator="@" />
+          </node>
+        </introspection-scope>
+      </schema-mapping>
+      <choose-schema-mapping>
+        <introspection-scope>
+          <node kind="schema">
+            <name qname="main" operator="@" />
+          </node>
+        </introspection-scope>
+      </choose-schema-mapping>
+      <use-database kind="schema">
+        <name qname="main" operator="@" />
+      </use-database>
+      <url>jdbc:sqlite:/Users/kushagramishra/Downloads/assignment/se-assessment/jira-agent/jira.db</url>
+      <remarks />
+      <vm-options />
+      <driver-info id="sqlite.xerial" />
+      <ssh-properties enabled="false" />
+      <jdbc-additional-properties>
+        <property name="enable_load_extension" value="true" />
+      </jdbc-additional-properties>
+      <ssl-config enabled="false">
+        <uuid />
+        <caFile />
+        <clientCertificateFile />
+        <clientKeyFile />
+        <sslMode>REQUIRE</sslMode>
+      </ssl-config>
+    </data-source>
+  </component>
+</project>

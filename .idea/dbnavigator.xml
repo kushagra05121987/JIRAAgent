@@ -6,12 +6,36 @@
   </component>
   <component name="DBNavigator.Project.DataEditorManager">
     <record-view-column-sorting-type value="BY_INDEX" />
-    <value-preview-text-wrapping value="true" />
+    <value-preview-text-wrapping value="false" />
     <value-preview-pinned value="false" />
   </component>
   <component name="DBNavigator.Project.DatabaseAssistantManager">
     <assistants>
-      <assistant-state connection-id="2b1c8a25-eeec-4275-af49-66337cb7a993" assistant-type="PUBLIC" default-profile-name="" selected-chat-id="" availability="AVAILABLE" acknowledgement="NONE" selected="true">
+      <assistant-state connection-id="virtual-sqlite-connection" assistant-type="PUBLIC" default-profile-name="" selected-chat-id="" availability="AVAILABLE" acknowledgement="NONE" selected="true">
+        <tools />
+      </assistant-state>
+      <assistant-state connection-id="virtual-sqlite-connection" assistant-type="SELECT_AI" default-profile-name="" selected-chat-id="" availability="UNAVAILABLE" acknowledgement="NONE">
+        <tools />
+      </assistant-state>
+      <assistant-state connection-id="2b1c8a25-eeec-4275-af49-66337cb7a993" assistant-type="PUBLIC" default-profile-name="" selected-chat-id="8D692B553BD942AC97C4975E3FD1B8FA" availability="AVAILABLE" acknowledgement="ENGAGED" selected="true">
+        <chats>
+          <chat id="8D692B553BD942AC97C4975E3FD1B8FA" title="User1 Entry Count" session-signature="" timestamp="1782478281621">
+            <messages>
+              <message id="19d20d29-1658-4ade-b473-112286bc883f" type="NEUTRAL" author="USER" timestamp="1782478281621" folded="false">
+                <content><![CDATA[how many enteries are there with user1]]></content>
+                <context provider="OPEN_AI" profile="implicit-profile-2ff9092f-0609-4f94-91d7-be131a8ba563" model="GPT_4_O" action="" interactive="true" />
+              </message>
+              <message id="723c474a-51e5-4e81-a02d-b3f165020126" type="ERROR" author="SYSTEM" timestamp="1782478281840" folded="false">
+                <content><![CDATA[Failed to invoke Public LLM.
+
+Error details:
+com.fasterxml.jackson.databind.Module: com.fasterxml.jackson.module.kotlin.KotlinModule not a subtype]]></content>
+                <context provider="OPEN_AI" profile="implicit-profile-2ff9092f-0609-4f94-91d7-be131a8ba563" model="GPT_4_O" action="" interactive="true" />
+              </message>
+            </messages>
+            <context provider="OPEN_AI" profile="implicit-profile-2ff9092f-0609-4f94-91d7-be131a8ba563" model="GPT_4_O" action="" interactive="true" />
+          </chat>
+        </chats>
         <tools />
       </assistant-state>
       <assistant-state connection-id="2b1c8a25-eeec-4275-af49-66337cb7a993" assistant-type="SELECT_AI" default-profile-name="" selected-chat-id="" availability="UNAVAILABLE" acknowledgement="NONE">
@@ -25,7 +49,11 @@
       </assistant-state>
     </assistants>
     <selection-state>
-      <model-selection />
+      <model-selection>
+        <assistant type="PUBLIC">
+          <selection provider-id="OPEN_AI" model-id="GPT_4_O" />
+        </assistant>
+      </model-selection>
     </selection-state>
   </component>
   <component name="DBNavigator.Project.DatabaseBrowserManager">
@@ -36,7 +64,7 @@
   </component>
   <component name="DBNavigator.Project.DatabaseConsoleManager">
     <connection id="2b1c8a25-eeec-4275-af49-66337cb7a993">
-      <console name="Connection 2" type="STANDARD" schema="main" session="Main"><![CDATA[select * from jira_issues;]]></console>
+      <console name="Connection 2" type="STANDARD" schema="main" session="Pool"><![CDATA[select * from main;]]></console>
     </connection>
   </component>
   <component name="DBNavigator.Project.DatabaseEditorStateManager">
@@ -54,6 +82,9 @@
   <component name="DBNavigator.Project.ExecutionManager">
     <retain-sticky-names value="false" />
   </component>
+  <component name="DBNavigator.Project.FileConnectionMappingManager">
+    <mapping file-url="file://$APPLICATION_CONFIG_DIR$/consoles/database-tool/a50e6047-1498-458c-8d73-6aae83971f4d/console.sql" connection-id="2b1c8a25-eeec-4275-af49-66337cb7a993" session-id="MAIN" current-schema="main" />
+  </component>
   <component name="DBNavigator.Project.MethodExecutionManager">
     <method-browser />
     <execution-history>
@@ -68,6 +99,11 @@
   </component>
   <component name="DBNavigator.Project.ParserDiagnosticsManager">
     <diagnostics-history />
+  </component>
+  <component name="DBNavigator.Project.ScriptExecutionManager" clear-outputs="true">
+    <recently-used-interfaces>
+      <mapping database-type="SQLITE" interface-id="DEFAULT" />
+    </recently-used-interfaces>
   </component>
   <component name="DBNavigator.Project.Settings">
     <connections>
@@ -589,7 +625,9 @@
     </ddl-file-settings>
     <assistant-settings>
       <credential-settings>
-        <credentials />
+        <credentials>
+          <credential id="2ff9092f-0609-4f94-91d7-be131a8ba563" name="Open AI" user="" provider="OPEN_AI" />
+        </credentials>
       </credential-settings>
       <profile-settings>
         <profiles />

@@ -118,7 +118,12 @@ public class PlanningOrchestrator {
         try {
             String previousPlanSummary = buildPreviousPlanSummary(session.plan());
 
-            String feedbackPrompt = session.request().prompt() + "\n\nYou previously produced this plan which the user rejected:\n" + previousPlanSummary + "\n\nThe user's feedback on why it was rejected: " + (review.feedback() != null && !review.feedback().isBlank() ? review.feedback() : "No specific feedback provided. Please try a different approach.") + "\nRevise the plan to address the feedback while still satisfying the original request.";
+            String feedbackPrompt = session.request().prompt()
+                    + "\n\nYou previously produced this plan which the user rejected:\n"
+                    + previousPlanSummary
+                    + "\n\nThe user's feedback on why it was rejected: "
+                    + (review.feedback() != null && !review.feedback().isBlank() ? review.feedback() : "No specific feedback provided. Please try a different approach.")
+                    + "\nRevise the plan to address the feedback while still satisfying the original request.";
 
             ssePublisher.publishEvent(session.bridge(), "Replanning based on your feedback ...");
 

@@ -16,6 +16,7 @@ import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Sinks;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 
@@ -54,6 +55,7 @@ public class PlanningController {
         String threadId = UUID.randomUUID().toString();
 
         return manyUnicast.asFlux()
+                .timeout(Duration.ofMinutes(2))
                 .doOnSubscribe(ignored -> Schedulers.boundedElastic().schedule(() ->
                         orchestrator.startPlanForReview(request, manyUnicast, bridge, threadId)));
     }
