@@ -22,6 +22,7 @@ import reactor.core.publisher.Sinks;
 
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class PlanningOrchestrator {
@@ -38,15 +39,7 @@ public class PlanningOrchestrator {
     private final ExecutionSessionStore sessionStore;
     private final int maxReviewAttempts;
 
-    public PlanningOrchestrator(InputGuardrail inputGuardrail,
-                                OutputGuardrail outputGuardrail,
-                                SsePublisher ssePublisher,
-                                PlanExecutor executor,
-                                GraphPlanExecutor graphExecutor,
-                                PlanGraph planGraph,
-                                ExecutionSessionStore sessionStore,
-                                @Value("${agent.executor.use-graph:true}") boolean useGraph,
-                                @Value("${agent.planner.max-review-attempts:3}") int maxReviewAttempts) {
+    public PlanningOrchestrator(InputGuardrail inputGuardrail, OutputGuardrail outputGuardrail, SsePublisher ssePublisher, PlanExecutor executor, GraphPlanExecutor graphExecutor, PlanGraph planGraph, ExecutionSessionStore sessionStore, @Value("${agent.executor.use-graph:true}") boolean useGraph, @Value("${agent.planner.max-review-attempts:3}") int maxReviewAttempts) {
         this.inputGuardrail = inputGuardrail;
         this.outputGuardrail = outputGuardrail;
         this.executor = executor;
@@ -62,10 +55,7 @@ public class PlanningOrchestrator {
         return plan(request, bridge).response();
     }
 
-    public void startPlanForReview(PlanRequest request,
-                                   Sinks.Many<ServerSentEvent<Object>> many,
-                                   FluxSink<ServerSentEvent<Object>> bridge,
-                                   String threadId) {
+    public void startPlanForReview(PlanRequest request, Sinks.Many<ServerSentEvent<Object>> many, FluxSink<ServerSentEvent<Object>> bridge, String threadId) {
         try {
             ssePublisher.publishEvent(bridge, "Planning your execution ...");
 
@@ -76,7 +66,7 @@ public class PlanningOrchestrator {
                 return;
             }
 
-            PlanGraph.Result result = planGraph.run(request.prompt(), bridge);
+            PlanGraph.Result result = planGraph.run(request.prompt(), bridge, threadId);
             if (!result.valid()) {
                 ssePublisher.publishEvent(bridge, Map.of("error", "Planning failed: " + result.reason()));
                 many.tryEmitComplete();
@@ -107,10 +97,9 @@ public class PlanningOrchestrator {
             sessionStore.remove(threadId);
             try {
                 ssePublisher.publishEvent(session.bridge(), "Plan approved. Executing your request ...");
-                boolean paginated = session.plan().steps() != null &&
-                        session.plan().steps().stream().anyMatch(PlanStep::paginated);
+                boolean paginated = session.plan().steps() != null && session.plan().steps().stream().anyMatch(PlanStep::paginated);
                 if (paginated) {
-                    graphExecutor.execute(session.plan(), session.bridge());
+                    graphExecutor.execute(session.plan(), session.bridge(), threadId);
                 }
             } finally {
                 session.many().tryEmitComplete();
@@ -120,8 +109,7 @@ public class PlanningOrchestrator {
 
         int nextAttempt = session.replanAttempts() + 1;
         if (nextAttempt >= maxReviewAttempts) {
-            ssePublisher.publishEvent(session.bridge(), Map.of(
-                    "error", "Maximum replan attempts (" + maxReviewAttempts + ") reached. Please start a new request."));
+            ssePublisher.publishEvent(session.bridge(), Map.of("error", "Maximum replan attempts (" + maxReviewAttempts + ") reached. Please start a new request."));
             session.many().tryEmitComplete();
             sessionStore.remove(threadId);
             return;
@@ -130,29 +118,20 @@ public class PlanningOrchestrator {
         try {
             String previousPlanSummary = buildPreviousPlanSummary(session.plan());
 
-            String feedbackPrompt = session.request().prompt()
-                    + "\n\nYou previously produced this plan which the user rejected:\n"
-                    + previousPlanSummary
-                    + "\n\nThe user's feedback on why it was rejected: "
-                    + (review.feedback() != null && !review.feedback().isBlank()
-                    ? review.feedback()
-                    : "No specific feedback provided. Please try a different approach.")
-                    + "\nRevise the plan to address the feedback while still satisfying the original request.";
+            String feedbackPrompt = session.request().prompt() + "\n\nYou previously produced this plan which the user rejected:\n" + previousPlanSummary + "\n\nThe user's feedback on why it was rejected: " + (review.feedback() != null && !review.feedback().isBlank() ? review.feedback() : "No specific feedback provided. Please try a different approach.") + "\nRevise the plan to address the feedback while still satisfying the original request.";
 
             ssePublisher.publishEvent(session.bridge(), "Replanning based on your feedback ...");
 
-            PlanGraph.Result result = planGraph.run(feedbackPrompt, session.bridge());
+            PlanGraph.Result result = planGraph.run(feedbackPrompt, session.bridge(), threadId);
             if (!result.valid()) {
-                ssePublisher.publishEvent(session.bridge(), Map.of(
-                        "error", "Replanning failed: " + result.reason()));
+                ssePublisher.publishEvent(session.bridge(), Map.of("error", "Replanning failed: " + result.reason()));
                 session.many().tryEmitComplete();
                 sessionStore.remove(threadId);
                 return;
             }
 
             Plan newPlan = result.plan();
-            sessionStore.put(threadId, new PendingExecution(
-                    session.many(), session.bridge(), session.request(), newPlan, nextAttempt));
+            sessionStore.put(threadId, new PendingExecution(session.many(), session.bridge(), session.request(), newPlan, nextAttempt));
             publishPlanForReview(session.bridge(), newPlan, threadId, nextAttempt);
 
         } catch (Exception e) {
@@ -167,30 +146,14 @@ public class PlanningOrchestrator {
         StringBuilder sb = new StringBuilder();
         sb.append("Summary: ").append(plan.summary()).append("\n");
         sb.append("Steps:\n");
-        plan.steps().stream()
-                .filter(s -> !s.isCount())
-                .forEach(s -> sb.append("  - ").append(s.rationale()).append("\n"));
+        plan.steps().stream().filter(s -> !s.isCount()).forEach(s -> sb.append("  - ").append(s.rationale()).append("\n"));
         return sb.toString();
     }
 
-    private void publishPlanForReview(FluxSink<ServerSentEvent<Object>> bridge,
-                                      Plan plan, String threadId, int attempt) {
-        List<Map<String, String>> steps = plan.steps().stream()
-                .filter(s -> !s.isCount())
-                .map(s -> Map.of("step", String.valueOf(s.stepNumber()), "action", s.rationale()))
-                .toList();
+    private void publishPlanForReview(FluxSink<ServerSentEvent<Object>> bridge, Plan plan, String threadId, int attempt) {
+        List<Map<String, String>> steps = plan.steps().stream().filter(s -> !s.isCount()).map(s -> Map.of("step", String.valueOf(s.stepNumber()), "action", s.rationale())).toList();
 
-        ssePublisher.publishEvent(bridge, Map.of(
-                "type", "PLAN_REVIEW",
-                "threadId", threadId,
-                "summary", plan.summary(),
-                "steps", steps,
-                "attemptsUsed", attempt,
-                "attemptsRemaining", maxReviewAttempts - attempt - 1,
-                "instructions", "POST /api/execute/review/" + threadId
-                        + " with {\"approved\": true} to execute"
-                        + " or {\"approved\": false, \"feedback\": \"your feedback\"} to replan."
-        ));
+        ssePublisher.publishEvent(bridge, Map.of("type", "PLAN_REVIEW", "threadId", threadId, "summary", plan.summary(), "steps", steps, "attemptsUsed", attempt, "attemptsRemaining", maxReviewAttempts - attempt - 1, "instructions", "POST /api/execute/review/" + threadId + " with {\"approved\": true} to execute" + " or {\"approved\": false, \"feedback\": \"your feedback\"} to replan."));
     }
 
     private PlanOutcome plan(PlanRequest request, FluxSink<ServerSentEvent<Object>> sink) {
@@ -202,7 +165,7 @@ public class PlanningOrchestrator {
 
         PlanGraph.Result result;
         try {
-            result = planGraph.run(request.prompt(), sink);
+            result = planGraph.run(request.prompt(), sink, UUID.randomUUID().toString());
         } catch (Exception e) {
             log.error("Plan graph failed", e);
             return new PlanOutcome(PlanResponse.rejected("Planning failed: " + e.getMessage()), null);
@@ -210,8 +173,7 @@ public class PlanningOrchestrator {
 
         if (!result.valid()) {
             log.info("Planning failed after {} attempt(s): {}", result.attempts(), result.reason());
-            return new PlanOutcome(PlanResponse.rejected(
-                    "Generated plan rejected after " + result.attempts() + " attempt(s): " + result.reason()), null);
+            return new PlanOutcome(PlanResponse.rejected("Generated plan rejected after " + result.attempts() + " attempt(s): " + result.reason()), null);
         }
 
         return new PlanOutcome(PlanResponse.ok(result.plan(), result.warnings()), result.plan());

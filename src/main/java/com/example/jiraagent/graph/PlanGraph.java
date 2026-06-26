@@ -40,7 +40,7 @@ public class PlanGraph {
     public record Result(Plan plan, boolean valid, String reason, List<String> warnings, int attempts) {
     }
 
-    public Result run(String prompt, FluxSink<ServerSentEvent<Object>> sink) {
+    public Result run(String prompt, FluxSink<ServerSentEvent<Object>> sink, String threadId) {
         try {
             CompiledGraph<PlanGraphState> graph = buildGraph(sink);
 
@@ -48,7 +48,7 @@ public class PlanGraph {
             init.put(PlanGraphState.PROMPT, prompt);
             init.put(PlanGraphState.ATTEMPTS, 0);
 
-            RunnableConfig config = RunnableConfig.builder().threadId("Thread-1").build();
+            RunnableConfig config = RunnableConfig.builder().threadId(threadId).build();
             PlanGraphState finalState = graph.invoke(init, config).orElseThrow(() -> new IllegalStateException("Plan graph produced no final state"));
 
             return new Result(finalState.plan(), finalState.valid(), finalState.reason(), finalState.warnings(), finalState.attempts());

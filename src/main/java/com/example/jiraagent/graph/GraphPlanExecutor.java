@@ -40,7 +40,7 @@ public class GraphPlanExecutor {
         this.maxRetryProcessItems = maxRetryProcessItems;
     }
 
-    public ExecutionReport execute(Plan plan, FluxSink<ServerSentEvent<Object>> sink) {
+    public ExecutionReport execute(Plan plan, FluxSink<ServerSentEvent<Object>> sink, String threadId) {
         if (plan == null || plan.steps() == null || plan.steps().isEmpty()) {
             return new ExecutionReport(false, "Empty plan; nothing to execute.", List.of());
         }
@@ -80,7 +80,7 @@ public class GraphPlanExecutor {
                 return new ExecutionReport(true, "Plan executed.", List.of());
             }
             CompiledGraph<JiraAgentState> graph = buildGraph(sink);
-            RunnableConfig config = RunnableConfig.builder().threadId("Thread-1").build();
+            RunnableConfig config = RunnableConfig.builder().threadId(threadId).build();
             JiraAgentState finalState = graph.invoke(init, config).orElseThrow(() -> new IllegalStateException("Graph produced no final state"));
 
             List<StepResult> results = finalState.results();
