@@ -124,22 +124,62 @@ curl -X POST http://localhost:8080/api/plan \
 
 ---
 
-### Execute — plan and run with real-time progress streaming
+### Execute — plan, review, then run with real-time progress streaming
 
-Streams progress over SSE as each record is processed. The connection stays open until all records are done or an error occurs.
+The execute flow is a two-step process: the agent first plans and asks for your approval, then executes only after you confirm. The SSE connection stays open throughout both steps.
+
+**Step 1 — Open the SSE stream and receive the plan for review**
+
+In Postman (or curl with `--no-buffer`), open the SSE connection:
 
 ```bash
 curl -X POST http://localhost:8080/api/execute \
   -H "Content-Type: application/json" \
   -H "Accept: text/event-stream" \
+  --no-buffer \
   -d '{"prompt": "find issues assigned to user1, assign to user2, set In Progress"}'
 ```
 
-**Example stream:**
+The stream opens immediately and you receive a planning event followed by a review request:
+
 ```
 data: {"message": "Planning your execution ..."}
 
-data: {"message": "Executing your request ..."}
+data: {
+  "type": "PLAN_REVIEW",
+  "threadId": "a3f8c2d1-...",
+  "summary": "Fetch issues assigned to user1, reassign to user2, set status to In Progress.",
+  "steps": [
+    { "step": "2", "action": "Fetch Jira issues assigned to user1 for processing." },
+    { "step": "3", "action": "Assign each fetched issue to user2." },
+    { "step": "4", "action": "Set the status of each issue to In Progress." }
+  ],
+  "attemptsUsed": 0,
+  "attemptsRemaining": 2,
+  "instructions": "POST /api/execute/review/a3f8c2d1-... with {\"approved\": true} to execute or {\"approved\": false, \"feedback\": \"your feedback\"} to replan."
+}
+```
+
+**The stream stays open here — nothing has been written to the database yet.**
+
+---
+
+**Step 2a — Approve the plan (in a second Postman tab)**
+
+```bash
+curl -X POST http://localhost:8080/api/execute/review/a3f8c2d1-... \
+  -H "Content-Type: application/json" \
+  -d '{"approved": true}'
+```
+
+Response:
+```json
+{ "threadId": "a3f8c2d1-...", "message": "Approval received. Execution started — watch the SSE stream for progress." }
+```
+
+Back in the original SSE stream:
+```
+data: {"message": "Plan approved. Executing your request ..."}
 
 data: {"message": "Processing PROJ-15"}
 
@@ -147,10 +187,33 @@ data: {"message": "Processing INFRA-132"}
 
 data: {"message": "Processing API-164"}
 
-... (one event per record)
+... (one event per record, stream closes when done)
 ```
 
-The stream closes when all records have been processed or a terminal error is reached.
+---
+
+**Step 2b — Reject and request a revised plan**
+
+If the plan doesn't look right, send feedback instead:
+
+```bash
+curl -X POST http://localhost:8080/api/execute/review/a3f8c2d1-... \
+  -H "Content-Type: application/json" \
+  -d '{"approved": false, "feedback": "also set priority to High"}'
+```
+
+Back in the SSE stream, the agent replans using your feedback alongside the previous rejected plan as context, then sends a new `PLAN_REVIEW` event. You can reject up to **3 times total** before the agent stops and asks you to start a new request.
+
+---
+
+**Step 2c — Retries exhausted**
+
+If you reject the plan 3 times:
+```
+data: {"error": "Maximum replan attempts (3) reached. Please start a new request."}
+```
+
+The stream closes. Start a new `/api/execute` request with a clearer prompt.
 
 ---
 
@@ -161,7 +224,8 @@ All settings live in `src/main/resources/application.properties`.
 | Property | Default | What it controls |
 |---|---|---|
 | `spring.ai.openai.chat.options.model` | `gpt-4o` | Model used for planning. Higher-capability models produce fewer invalid plans and fewer retries. |
-| `agent.planner.max-attempts` | `2` | How many times the AI retries if its plan is rejected by the guardrail. |
+| `agent.planner.max-attempts` | `2` | How many times the AI retries if its plan is rejected by the automated guardrail. |
+| `agent.planner.max-review-attempts` | `3` | How many times the user can reject the plan and request a replan before the agent gives up. |
 | `agent.executor.page-size` | `1` | Records fetched per page. Set to `1` for demo visibility. Raise to `50–100` in production. |
 | `agent.executor.maxIterations` | `10000` | LangGraph4j graph step limit. Formula: `(max_records / page_size) × 6 + buffer`. |
 | `agent.executor.maxRetryProcessItems` | `2` | How many times a failed page of records is retried before the agent gives up. |
