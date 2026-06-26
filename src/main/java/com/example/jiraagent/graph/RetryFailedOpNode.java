@@ -2,6 +2,8 @@ package com.example.jiraagent.graph;
 
 import com.example.jiraagent.exec.StepResult;
 import com.example.jiraagent.exec.ToolInvoker;
+import com.example.jiraagent.guardrail.GuardrailResult;
+import com.example.jiraagent.guardrail.OutputGuardrail;
 import com.example.jiraagent.model.PlanStep;
 import com.example.jiraagent.service.SsePublisher;
 import org.bsc.langgraph4j.action.NodeAction;
@@ -15,18 +17,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Future;
 
-public class ProcessItemsNode implements NodeAction<JiraAgentState> {
+public class RetryFailedOpNode implements NodeAction<JiraAgentState> {
 
-    private static final Logger log = LoggerFactory.getLogger(ProcessItemsNode.class);
+    private static final Logger log = LoggerFactory.getLogger(RetryFailedOpNode.class);
 
     private final ToolInvoker invoker;
     private final FluxSink<ServerSentEvent<Object>> sink;
     private final SsePublisher ssePublisher;
 
-    public ProcessItemsNode(ToolInvoker invoker, FluxSink<ServerSentEvent<Object>> sink, SsePublisher ssePublisher) {
+    public RetryFailedOpNode(ToolInvoker invoker, FluxSink<ServerSentEvent<Object>> sink, SsePublisher ssePublisher) {
         this.invoker = invoker;
         this.sink = sink;
         this.ssePublisher = ssePublisher;
@@ -35,24 +37,25 @@ public class ProcessItemsNode implements NodeAction<JiraAgentState> {
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> apply(JiraAgentState state) {
-        List<Object> items = state.currentItems();
-        List<PlanStep> body = state.bodySteps();
-        int offset = state.offset();
-        int pageSize = state.pageSize();
-
         ConcurrentLinkedQueue<StepResult> pageResults = new ConcurrentLinkedQueue<>();
         ConcurrentLinkedQueue<Object[]> failedSteps = new ConcurrentLinkedQueue<>();
-
-        List<CompletableFuture<Void>> futures = new ArrayList<>(items.size());
-        Map<String, Object> update = new HashMap<>();
-        for (Object item : items) {
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        state.failedSteps().forEach(step -> {
             futures.add(CompletableFuture.runAsync(() -> {
-                ssePublisher.publishEvent(sink, "Processing " + ((Map<String, Object>) item).get("issue_key"));
-                runBodyForItem(body, item, pageResults, failedSteps);
+                ssePublisher.publishEvent(sink, "Processing " + ((Map<String, Object>) step[0]).get("issue_key"));
+                StepResult r = invoker.invoke((PlanStep) step[1], step[0], step[0]);
+                pageResults.add(r);
+                if (!r.success() || r.error() != null) {
+                    log.warn(r.error());
+                    ssePublisher.publishEvent(sink, "Step : " + ((PlanStep) step[1]).rationale() + " failed for item: "+ step[0] + ". Retrying ...");
+                    failedSteps.add(new Object[]{step[0], step[1]});
+                }
             }));
-        }
+        });
+
         CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
 
+        Map<String, Object> update = new HashMap<>();
         if (pageResults.stream().anyMatch(r -> !r.success())) {
             update.put(JiraAgentState.PROCESS_ITEMS_RETRY, true);
             update.put(JiraAgentState.PROCESS_ITEM_ATTEMPTS, state.processItemAttempts() + 1);
@@ -62,25 +65,6 @@ public class ProcessItemsNode implements NodeAction<JiraAgentState> {
             update.put(JiraAgentState.PROCESS_ITEM_ATTEMPTS, 0);
             update.put(JiraAgentState.PROCESS_ITEMS_RETRY, false);
         }
-
-        log.debug("process_items offset={} processed {} items, {} calls", offset, items.size(), pageResults.size());
-
-        update.put(JiraAgentState.OFFSET, offset + pageSize);
-        update.put(JiraAgentState.RESULTS, new ArrayList<>(pageResults));
         return update;
-    }
-
-    private void runBodyForItem(List<PlanStep> body, Object item, ConcurrentLinkedQueue<StepResult> resultContainer, ConcurrentLinkedQueue<Object[]> failedSteps) {
-        for (PlanStep step : body) {
-            StepResult r = invoker.invoke(step, item, item);
-            resultContainer.add(r);
-            if (!r.success()) {
-                log.warn("Step {} ({}) failed for item {}: {}", step.stepNumber(), step.tool(), item, r.error());
-                failedSteps.add(new Object[]{item, step});
-                return;
-            } else if (r.error() != null) {
-                ssePublisher.publishEvent(sink, r.error());
-            }
-        }
     }
 }

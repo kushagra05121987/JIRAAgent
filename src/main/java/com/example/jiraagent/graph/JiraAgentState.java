@@ -21,6 +21,7 @@ public class JiraAgentState extends AgentState {
     public static final String RESULTS = "results";
     public static final String PROCESS_ITEMS_RETRY = "process_items_retry";
     public static final String PROCESS_ITEM_ATTEMPTS = "process_item_attempts";
+    public static final String FAILED_STEPS = "failed_steps";
 
     public static final Map<String, Channel<?>> SCHEMA = Map.of(
             RESULTS, Channels.appender(ArrayList::new)
@@ -64,5 +65,9 @@ public class JiraAgentState extends AgentState {
 
     public int processItemAttempts() {
         return this.<Integer>value(PROCESS_ITEM_ATTEMPTS).orElse(0);
+    }
+
+    public List<Object[]> failedSteps() {
+        return this.<List<Object[]>>value(FAILED_STEPS).orElse(List.of());
     }
 }

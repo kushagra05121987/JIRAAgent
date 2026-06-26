@@ -96,18 +96,25 @@ public class GraphPlanExecutor {
     private CompiledGraph<JiraAgentState> buildGraph(FluxSink<ServerSentEvent<Object>> sink) throws GraphStateException {
         FetchPageNode fetch = new FetchPageNode(invoker);
         ProcessItemsNode process = new ProcessItemsNode(invoker, sink, ssePublisher);
+        RetryFailedOpNode retryFailedOpNode = new RetryFailedOpNode(invoker, sink, ssePublisher);
         ErrorNodeExecutionGraph errorNodeExecutionGraph = new ErrorNodeExecutionGraph(sink, ssePublisher);
 
         StateGraph<JiraAgentState> g = new StateGraph<>(JiraAgentState.SCHEMA, JiraAgentState::new)
                 .addNode("fetch_page", node_async(fetch))
                 .addNode("process_items", node_async(process))
                 .addNode("error", node_async(errorNodeExecutionGraph))
+                .addNode("retry_failed_items", node_async(retryFailedOpNode))
                 .addEdge(START, "fetch_page")
                 .addConditionalEdges("process_items",
                         edge_async(state -> state.processItemsRetry() ?
                                 state.processItemAttempts() < maxRetryProcessItems ?
                                         "retry_process_items" : "error" : state.offset() >= state.totalCount() ? "exhausted" : "more")
-                        , Map.of("retry_process_items", "process_items", "error", "error", "more", "fetch_page", "exhausted", END))
+                        , Map.of("retry_process_items", "retry_failed_items", "error", "error", "more", "fetch_page", "exhausted", END))
+                .addConditionalEdges("retry_failed_items",
+                        edge_async(state -> state.processItemsRetry() ?
+                                state.processItemAttempts() < maxRetryProcessItems ?
+                                        "retry_process_items" : "error" : state.offset() >= state.totalCount() ? "exhausted" : "more")
+                        , Map.of("retry_process_items", "retry_failed_items", "error", "error", "more", "fetch_page", "exhausted", END))
                 .addEdge("fetch_page", "process_items")
                 .addEdge("error", END);
 

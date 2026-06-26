@@ -4,10 +4,8 @@ import com.example.jiraagent.guardrail.OutputGuardrail;
 import com.example.jiraagent.model.Plan;
 import com.example.jiraagent.service.PlannerService;
 import com.example.jiraagent.service.SsePublisher;
-import org.bsc.langgraph4j.CompiledGraph;
-import org.bsc.langgraph4j.GraphStateException;
-import org.bsc.langgraph4j.RunnableConfig;
-import org.bsc.langgraph4j.StateGraph;
+import org.bsc.langgraph4j.*;
+import org.bsc.langgraph4j.checkpoint.MemorySaver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
@@ -79,6 +77,6 @@ public class PlanGraph {
                     return state.attempts() < maxAttempts ? "retry" : "failed";
                 }), Map.of("ok", END, "retry", "plan", "failed", "error"));
 
-        return g.compile();
+        return g.compile(CompileConfig.builder().checkpointSaver(new MemorySaver()).build());
     }
 }
