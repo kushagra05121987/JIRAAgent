@@ -29,7 +29,7 @@ The plan is concrete. It's not "find the issues and update them." It's:
 - Step 3: For each issue — reassign to user2
 - Step 4: For each issue — set status to In Progress
 
-Crucially, the AI writes the plan once and hands it over. It does not make decisions during execution. This matters because AI decisions are unpredictable — if the AI was involved for every single record, you'd have no way to guarantee it wouldn't do something unexpected on record number 347.
+Crucially, the AI writes the plan once and hands it over. It does not make decisions during execution. This matters for two reasons. First, AI decisions are unpredictable — if the AI was involved for every single record, you'd have no way to guarantee it wouldn't do something unexpected on record number 347. Second, cost — a single AI call to produce the plan costs the same regardless of whether you're processing 5 records or 5000. If the AI were involved per record, you'd pay for 5000 AI calls instead of one. The plan-then-execute pattern scales to any number of records at a fixed token cost.
 
 Once the plan is written, it goes through two automated checks:
 
@@ -46,6 +46,7 @@ Before a single record is touched, the agent pauses and sends the plan back to t
 > **Plan summary:** Fetch issues assigned to user1, reassign to user2, set status to In Progress.
 >
 > Actions:
+>
 > 1. Fetch Jira issues assigned to user1 for processing.
 > 2. Assign each fetched issue to user2.
 > 3. Set the status of each issue to In Progress.
@@ -78,7 +79,7 @@ This is the most important decision in the whole design. A common pattern for AI
 
 It does not work well for bulk operations on production data. If the AI is making 500 decisions in a loop, there's no way to audit what it decided or why. If it gets confused at record 300, you may have partially applied changes with no clean rollback.
 
-Here, the AI is involved for exactly one moment: writing the plan. Everything after that is deterministic. You can read the plan, understand exactly what will happen, and the execution will follow it precisely.
+Here, the AI is involved for exactly one moment: writing the plan. Everything after that is deterministic. You can read the plan, understand exactly what will happen, and the execution will follow it precisely. And because the AI is called only once — regardless of whether you're processing 10 records or 10,000 — the token cost is fixed. The alternative pattern where the AI decides what to do at each step would cost N times more for N records, making it economically unviable at scale.
 
 ### Live progress instead of a wait-and-see response
 
@@ -116,10 +117,11 @@ Every execution run is saved against a thread ID. This means:
 
 ## AI Models Used
 
-| Purpose | Model | Why |
-|---|---|---|
-| Writing the action plan | GPT-4o | Planning requires precise structured output and careful rule-following. GPT-4o is more reliable here than cheaper models, and since it's used only once per request, the cost is reasonable. |
-| Checking the plan is grounded | GPT-4o-mini | This is a simpler yes/no evaluation task. GPT-4o-mini handles it well at a fraction of the cost. |
+
+| Purpose                       | Model       | Why                                                                                                                                                                                          |
+| ----------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Writing the action plan       | GPT-4o      | Planning requires precise structured output and careful rule-following. GPT-4o is more reliable here than cheaper models, and since it's used only once per request, the cost is reasonable. |
+| Checking the plan is grounded | GPT-4o-mini | This is a simpler yes/no evaluation task. GPT-4o-mini handles it well at a fraction of the cost.                                                                                             |
 
 Both run at zero temperature — meaning no randomness in the output. This is not a creative writing tool. Every output needs to be precise and repeatable.
 
@@ -127,16 +129,17 @@ Both run at zero temperature — meaning no randomness in the output. This is no
 
 ## What Happens When Things Go Wrong?
 
-| Situation | What the agent does |
-|---|---|
-| Request is empty or looks malicious | Rejected immediately before the AI sees it |
-| AI produces a plan with made-up tools | Plan rejected, AI tries again (up to 2 times) |
-| AI plan doesn't match what the user asked | RAGAS evaluation fails, plan rejected and regenerated |
-| AI can't produce a valid plan after retries | Request rejected with a clear explanation of why |
-| User rejects the plan with feedback | Agent replans using the feedback, sends a new plan for review |
-| User rejects the plan 3 times in a row | Agent gives up and asks the user to start a new request |
-| A batch of records fails during execution | Retried automatically up to 2 times |
-| Retries exhausted on a batch | Error event streamed to the user, agent stops cleanly |
+
+| Situation                                   | What the agent does                                           |
+| ------------------------------------------- | ------------------------------------------------------------- |
+| Request is empty or looks malicious         | Rejected immediately before the AI sees it                    |
+| AI produces a plan with made-up tools       | Plan rejected, AI tries again (up to 2 times)                 |
+| AI plan doesn't match what the user asked   | RAGAS evaluation fails, plan rejected and regenerated         |
+| AI can't produce a valid plan after retries | Request rejected with a clear explanation of why              |
+| User rejects the plan with feedback         | Agent replans using the feedback, sends a new plan for review |
+| User rejects the plan 3 times in a row      | Agent gives up and asks the user to start a new request       |
+| A batch of records fails during execution   | Retried automatically up to 2 times                           |
+| Retries exhausted on a batch                | Error event streamed to the user, agent stops cleanly         |
 
 ---
 
